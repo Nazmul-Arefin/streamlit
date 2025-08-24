@@ -11,7 +11,11 @@ from typing import List, Tuple, Optional, Any
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 import streamlit as st
-import cv2
+try:
+    import cv2  # type: ignore
+    CV2_OK = True
+except Exception:
+    CV2_OK = False
 
 from paddleocr import PaddleOCR
 import pyttsx3
@@ -191,17 +195,37 @@ def normalize_paddle_result(result: Any) -> Tuple[List[List[List[float]]], List[
 
 # ---------------- Light preprocessing to help OCR ----------------
 def preprocess_for_ocr(img_pil: Image.Image) -> Image.Image:
-    """Upscale + adaptive threshold to help on low-contrast/small images."""
-    img = np.array(img_pil.convert("RGB"))
-    h, w = img.shape[:2]
-    if min(h, w) < 720:
-        scale = 720.0 / max(1, min(h, w))
-        img = cv2.resize(img, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_CUBIC)
-    gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
-    gray = cv2.GaussianBlur(gray, (3, 3), 0)
-    thr = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 25, 10)
-    cleaned = cv2.cvtColor(thr, cv2.COLOR_GRAY2RGB)
-    return Image.fromarray(cleaned)
+    if CV2_OK:
+        img = np.array(img_pil.convert("RGB"))
+        h, w = img.shape[:2]
+        if min(h, w) < 720:
+            scale = 720.0 / max(1, min(h, w))
+            img = cv2.resize(img, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_CUBIC)
+        gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+        gray = cv2.GaussianBlur(gray, (3, 3), 0)
+        thr = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C,
+                                    cv2.THRESH_BINARY, 25, 10)
+        cleaned = cv2.cvtColor(thr, cv2.COLOR_GRAY2RGB)
+        return Image.fromarray(cleaned)
+    else:
+        # PIL-only: upscale, autocontrast, then simple threshold
+        img = img_pil.convert("L")  # grayscale
+        w, h = img.size
+        short = min(w, h)
+        if short < 720:
+            scale = 720.0 / max(1, short)
+            img = img.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
+        # Auto-contrast
+        try:
+            from PIL import ImageOps
+            img = ImageOps.autocontrast(img, cutoff=2)
+        except Exception:
+            pass
+        # Simple global threshold
+        arr = np.array(img)
+        thresh = int(arr.mean())
+        arr = (arr > thresh) * 255
+        return Image.fromarray(arr.astype(np.uint8)).convert("RGB")
 
 # ---------------- Sidebar ----------------
 with st.sidebar:
@@ -392,3 +416,4 @@ if st.session_state["text"] or st.session_state["img_src"]:
     st.markdown('</div>', unsafe_allow_html=True)
 else:
     st.caption("Upload an image to get started.")
+

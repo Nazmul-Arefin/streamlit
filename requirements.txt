@@ -1,12 +1,16 @@
-# ---- App core
+# App core
 streamlit>=1.33,<2
 pillow>=10.3,<11
-numpy>=2.0
-opencv-python>=4.8
+numpy==2.0.2
 pyttsx3>=2.99
 
-# ---- Paddle (Py 3.13 compatible)
+# Paddle stack (Py 3.13 compatible)
 paddlepaddle==3.1.0
 paddleocr==3.1.0
+
+# OpenCV without GUI/system libs
+opencv-python-headless>=4.8
+
+
 
 
